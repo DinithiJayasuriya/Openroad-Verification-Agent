@@ -1,0 +1,16 @@
+For each net that isn't connected to power or ground, gather its name, total capacitance, resistance, and coupling capacitance. Compile all this information into a list of lists.
+Perform a horizontal flip on the orientation of each 'NAND2_X1' library cell instance in the design.
+Mirror every 'NAND2_X1' library cell instance horizontally.
+Apply a vertical flip to the rotation of all instances using the 'AND2_X1' library cell.
+Connect the port named 'req_val' and net named 'req_msg[17]'
+Ensure that the 'req_val' port is hooked up to the 'req_msg[17]' net within the current design block.
+Link the 'req_val' port to the 'req_msg[17]' net in the current design block.
+In the current design block, link the 'req_val' port to the 'req_msg[17]' net.
+Establish a direct connection between the 'req_val' port and the 'req_msg[17]' net within the current design block.
+In the current design block, connect the 'req_val' port to the 'req_msg[17]' net.
+Update the library cell for the instance "_486_" to "INV_X4".
+Swap the master of instance "_486_" to "INV_X4".
+Assign "INV_X4" as the master for instance "_486_".
+Invert the placement and orientation of every instance with the 'NAND2_X1' library cell. Then, retrieve the coordinates of the instances named '_486_' and '_487_' and return them in a dictionary, using the instance names as keys and their corresponding locations as values.
+Please reverse the position and orientation of all instances using the 'NAND2_X1' library cell. After that, extract the locations of the instances named '_486_' and '_487_' and return them in a dictionary with the instance names as keys and their corresponding locations as values.
+Set the transform of '_486_' to 'MX'.

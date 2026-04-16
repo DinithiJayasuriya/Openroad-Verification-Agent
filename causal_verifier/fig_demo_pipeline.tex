@@ -1,0 +1,327 @@
+% fig_demo_pipeline.tex — Paper-ready demo figure for the Causal Agentic Pipeline
+% Compile: pdflatex fig_demo_pipeline.tex
+%
+% Shows one task ("Find which net is connected to pin A of instance inv_1")
+% through the full pipeline with one correction loop.
+
+\documentclass[10pt]{article}
+\usepackage[paperwidth=18cm, paperheight=52cm, margin=0.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows.meta,
+  positioning,
+  fit,
+  calc,
+  decorations.pathreplacing
+}
+\usepackage{xcolor}
+\usepackage{amssymb}
+
+\pagestyle{empty}
+
+% ── Colour palette ──────────────────────────────────────────────────────────
+\definecolor{inputbg}{HTML}{EBF5FB}
+\definecolor{llmbg}{HTML}{FEF9E7}
+\definecolor{ragbg}{HTML}{E8F8F5}
+\definecolor{verifybg}{HTML}{FDEDEC}
+\definecolor{ctrlbg}{HTML}{F4ECF7}
+\definecolor{passbg}{HTML}{D5F5E3}
+\definecolor{failred}{HTML}{E74C3C}
+\definecolor{passgreen}{HTML}{27AE60}
+\definecolor{arrowgray}{HTML}{5D6D7E}
+\definecolor{codebg}{HTML}{F8F9F9}
+\definecolor{bordergray}{HTML}{AEB6BF}
+\definecolor{titlebg}{HTML}{2C3E50}
+
+\tikzset{
+  stage/.style={
+    draw=bordergray, rounded corners=4pt, inner sep=6pt,
+    minimum width=16.5cm, text width=16cm,
+  },
+  stagetitle/.style={
+    fill=titlebg, text=white, font=\sffamily\bfseries\small,
+    rounded corners=2pt, inner sep=4pt,
+  },
+  promptbox/.style={
+    draw=bordergray!60, rounded corners=2pt, inner sep=5pt,
+    font=\sffamily\scriptsize,
+    text width=7.2cm, align=left,
+  },
+  outputbox/.style={
+    draw=bordergray!60, rounded corners=2pt, inner sep=5pt,
+    font=\ttfamily\scriptsize,
+    text width=7.2cm, align=left,
+  },
+  arw/.style={-{Stealth[length=5pt]}, arrowgray, line width=0.8pt},
+  looplabel/.style={font=\sffamily\bfseries\scriptsize},
+}
+
+\begin{document}
+
+\begin{tikzpicture}[node distance=0.4cm]
+
+% ════════════════════════════════════════════════════════════════════════════
+% TASK INPUT
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=inputbg] (input) {%
+  \textbf{\sffamily\small User Task (NLP Prompt)}\\[4pt]
+  {\sffamily\itshape ``Find which net is connected to pin A of instance inv\_1''}
+};
+
+% ════════════════════════════════════════════════════════════════════════════
+% STAGE 1 — CHAIN EXTRACTION
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=llmbg, below=0.4cm of input] (s1) {%
+  \node[stagetitle] (t1) at (0,0) {Stage 1: Causal Chain Extraction {\normalfont\footnotesize(LLM)}};
+
+  \vspace{6pt}
+
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\sffamily
+    \textbf{System Prompt:}\\
+    \textit{You are an OpenROAD Python API expert.
+    Given a task, identify the mandatory sequence of
+    object types that must be acquired step-by-step.}\\[3pt]
+    \textbf{Rules:} Entry point = \texttt{openroad.Design};
+    no \texttt{dbChip} (C++ only); exact Python type names;
+    output ONLY JSON array.\\[3pt]
+    \textbf{User:}~~\texttt{Task: Find which net is connected to pin A of instance inv\_1}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\ttfamily
+    \textbf{\sffamily LLM Output:}\\[3pt]
+    {[}"openroad.Design",\\
+    ~"odb.dbBlock",\\
+    ~"odb.dbInst",\\
+    ~"odb.dbITerm",\\
+    ~"odb.dbNet"{]}
+  \end{minipage}
+};
+
+\draw[arw] (input.south) -- (s1.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% STAGE 2 — RAG RETRIEVAL
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=ragbg, below=0.4cm of s1] (s2) {%
+  \textbf{\sffamily\small Stage 2: Graph-Guided RAG Retrieval}
+  {\sffamily\footnotesize (per-edge, no LLM)}\\[6pt]
+  {\footnotesize\sffamily
+  For each edge in the causal chain, query the structured API database
+  (\texttt{RAGAPIs.csv}) using structural matching, with semantic similarity fallback:}\\[4pt]
+  {\footnotesize
+  \begin{tabular}{@{}l@{~~$\rightarrow$~~}l@{~~~~}l@{~~~~}l@{}}
+    \textbf{Source} & \textbf{Target} & \textbf{Retrieved API Method} & \textbf{Score}\\[2pt]
+    \texttt{openroad.Design} & \texttt{odb.dbBlock} & \texttt{design.getBlock()~$\rightarrow$~dbBlock} & 1.00\\
+    \texttt{odb.dbBlock} & \texttt{odb.dbInst} & \texttt{block.findInst(inst\_name)~$\rightarrow$~dbInst} & 1.00\\
+    \texttt{odb.dbInst} & \texttt{odb.dbITerm} & \texttt{inst.findITerm(mterm\_name)~$\rightarrow$~dbITerm} & 0.92\\
+    \texttt{odb.dbITerm} & \texttt{odb.dbNet} & \texttt{iterm.getNet()~$\rightarrow$~dbNet} & 1.00\\
+  \end{tabular}}
+};
+
+\draw[arw] (s1.south) -- (s2.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% STAGE 3 — CODE GENERATION (Attempt 1)
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=llmbg, below=0.4cm of s2] (s3) {%
+  \textbf{\sffamily\small Stage 3: Constraint-Injected Code Generation}
+  {\sffamily\footnotesize (LLM --- Attempt 1)}\\[6pt]
+  %
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\sffamily
+    \textbf{System:} \textit{You are an expert OpenROAD Python
+    API programmer. Generate a script for the OpenROAD shell.}\\[2pt]
+    \textbf{Rules:} \texttt{design}/\texttt{tech} pre-available;
+    acquire in chain order; instance methods only;
+    flat code; null-check \texttt{find*()} calls;
+    provide \texttt{[Diagnosis]} if deviating from RAG.\\[4pt]
+    \textbf{User:}\\
+    \texttt{Task: Find which net is connected}\\
+    \texttt{to pin A of instance inv\_1}\\[2pt]
+    \texttt{Chain: Design $\to$ dbBlock $\to$ dbInst}\\
+    \texttt{~~~~~~~$\to$ dbITerm $\to$ dbNet}\\[2pt]
+    \texttt{Edge APIs:}\\
+    \texttt{~~design.getBlock() $\to$ dbBlock}\\
+    \texttt{~~block.findInst("inv\_1") $\to$ dbInst}\\
+    \texttt{~~inst.findITerm("A") $\to$ dbITerm}\\
+    \texttt{~~iterm.getNet() $\to$ dbNet}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\ttfamily
+    \textbf{\sffamily LLM Output:}\\[3pt]
+    {[}Diagnosis{]}: None\\
+    {[}Code{]}:\\
+    block = design.getBlock()\\
+    inst = block.findInst("inv\_1")\\
+    \textcolor{failred}{pin = inst.getITerm("A")}\\
+    net = pin.getNet()\\
+    print(net.getName())\\[6pt]
+    \sffamily\textcolor{failred}{$\uparrow$ Bug: \texttt{getITerm()} does not}\\
+    \textcolor{failred}{exist on \texttt{dbInst}.}\\
+    \textcolor{failred}{Also: no None-check on \texttt{findInst}.}
+  \end{minipage}
+};
+
+\draw[arw] (s2.south) -- (s3.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% STAGE 4 — VERIFICATION (FAIL)
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=verifybg, below=0.4cm of s3] (s4) {%
+  \textbf{\sffamily\small Stage 4: Multi-Layer Causal Verification}
+  {\sffamily\footnotesize --- \textcolor{failred}{FAIL}}\\[6pt]
+  {\footnotesize
+  \begin{tabular}{@{}l@{~~}p{8.5cm}@{~~}l@{}}
+    \textbf{Layer} & \textbf{Check} & \textbf{Result}\\[2pt]
+    L1 --- Syntax    & \texttt{ast.parse()} succeeds & \textcolor{passgreen}{$\checkmark$~PASS}\\[1pt]
+    L2 --- Causal Flow  & Chain continuity OK; methods on correct receivers & \textcolor{passgreen}{$\checkmark$~PASS}\\[1pt]
+    L2c --- Null Safety  & \texttt{findInst()} result used without None-check & \textcolor{failred}{$\times$~FAIL}\\[1pt]
+    L3 --- API Diff  & \texttt{getITerm("A")} not a method of \texttt{odb.dbInst}; RAG says \texttt{findITerm()} & \textcolor{failred}{$\times$~FAIL}\\
+  \end{tabular}}\\[6pt]
+  {\footnotesize\sffamily
+  \textbf{Structured Feedback} $\to$ Controller:
+  \textit{``FAIL(L3): hallucinated method \texttt{getITerm()} on \texttt{odb.dbInst}.
+  RAG suggests \texttt{inst.findITerm(mterm\_name)}.
+  Also: \texttt{findInst()} result must be None-checked before dereferencing.''}}
+};
+
+\draw[arw] (s3.south) -- (s4.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% CONTROLLER DECISION
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=ctrlbg, below=0.4cm of s4] (ctrl) {%
+  \textbf{\sffamily\small Controller Decision}
+  {\sffamily\footnotesize (LLM Arbiter)}\\[6pt]
+  %
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\sffamily
+    \textbf{System:} \textit{You are the Causal Arbiter.
+    Resolve conflicts between the Verifier and Generator.}\\[2pt]
+    \textbf{Actions:} \texttt{re\_generate},
+    \texttt{re\_retrieve\_edge},
+    \texttt{re\_extract\_chain},
+    \texttt{re\_generate\_tcl},
+    \texttt{commit\_best},
+    \texttt{stop\_fail}\\[2pt]
+    \textbf{Key rule:} L3 hard hallucination,
+    RAG already has the correct method
+    $\Rightarrow$ \texttt{re\_generate} with repair hint.\\[4pt]
+    \textbf{User:} Full agent state:\\
+    Chain, edge APIs, generated code,
+    verifier FAIL(L3), attempt 1/6
+  \end{minipage}\hfill
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\ttfamily
+    \textbf{\sffamily Controller Output:}\\[3pt]
+    \{\\
+    ~~"diagnosis": "getITerm() is\\
+    ~~~~hallucinated; correct method\\
+    ~~~~is findITerm()",\\
+    ~~"next\_action": "re\_generate",\\
+    ~~"repair\_hint": "Use\\
+    ~~~~inst.findITerm(\textquotesingle A\textquotesingle) not\\
+    ~~~~inst.getITerm(\textquotesingle A\textquotesingle).\\
+    ~~~~Add None-check after\\
+    ~~~~findInst().",\\
+    ~~"updated\_lesson": "dbInst has\\
+    ~~~~findITerm, not getITerm"\\
+    \}
+  \end{minipage}
+};
+
+\draw[arw] (s4.south) -- (ctrl.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% RE-GENERATION (Attempt 2)
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=llmbg, below=0.4cm of ctrl] (s3b) {%
+  \textbf{\sffamily\small Re-Generation}
+  {\sffamily\footnotesize (LLM --- Attempt 2, with repair hint injected)}\\[6pt]
+  %
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\sffamily
+    \textbf{User} (appended to conversation):\\[3pt]
+    \texttt{CRITICAL PROHIBITIONS:}\\
+    \texttt{- dbInst has findITerm, NOT getITerm}\\[3pt]
+    \texttt{REPAIR HINT:}\\
+    \texttt{Use inst.findITerm("A") not}\\
+    \texttt{inst.getITerm("A"). Add None-check}\\
+    \texttt{after findInst().}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{7.2cm}
+    \footnotesize\ttfamily
+    \textbf{\sffamily LLM Output (corrected):}\\[3pt]
+    {[}Diagnosis{]}: None\\
+    {[}Code{]}:\\
+    block = design.getBlock()\\
+    inst = block.findInst("inv\_1")\\
+    \textcolor{passgreen}{if inst is None:}\\
+    \textcolor{passgreen}{~~print("inv\_1 not found")}\\
+    \textcolor{passgreen}{else:}\\
+    \textcolor{passgreen}{~~pin = inst.findITerm("A")}\\
+    \textcolor{passgreen}{~~if pin is not None:}\\
+    \textcolor{passgreen}{~~~~net = pin.getNet()}\\
+    \textcolor{passgreen}{~~~~if net is not None:}\\
+    \textcolor{passgreen}{~~~~~~print(net.getName())}
+  \end{minipage}
+};
+
+\draw[arw] (ctrl.south) -- (s3b.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% RE-VERIFICATION (PASS)
+% ════════════════════════════════════════════════════════════════════════════
+\node[stage, fill=passbg, below=0.4cm of s3b] (s4b) {%
+  \textbf{\sffamily\small Re-Verification}
+  {\sffamily\footnotesize --- \textcolor{passgreen}{PASS}}\\[6pt]
+  {\footnotesize
+  \begin{tabular}{@{}l@{~~}p{9cm}@{~~}l@{}}
+    L1 --- Syntax      & \texttt{ast.parse()} OK & \textcolor{passgreen}{$\checkmark$}\\
+    L2 --- Causal Flow  & All 4 edges acquired in correct order & \textcolor{passgreen}{$\checkmark$}\\
+    L2c --- Null Safety  & \texttt{findInst}, \texttt{findITerm} both None-checked & \textcolor{passgreen}{$\checkmark$}\\
+    L3 --- API Diff     & \texttt{findITerm} matches RAG; \texttt{getNet} matches RAG & \textcolor{passgreen}{$\checkmark$}\\
+    L5 --- Semantic (LLM) & A$\checkmark$ B$\checkmark$ C$\checkmark$ D$\checkmark$ E$\checkmark$~~(5/5 = confidence 1.0) & \textcolor{passgreen}{$\checkmark$}\\
+  \end{tabular}}\\[6pt]
+  {\footnotesize\sffamily
+  \textbf{Controller:}~~\texttt{commit\_best}~~$\to$~~\textbf{Final code committed.}~~Budget used: 1 of 6.}
+};
+
+\draw[arw] (s3b.south) -- (s4b.north);
+
+% ════════════════════════════════════════════════════════════════════════════
+% LOOP ANNOTATION (right side)
+% ════════════════════════════════════════════════════════════════════════════
+
+% Bootstrap bracket
+\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick, arrowgray!70]
+  ([xshift=0.6cm]s1.north east) -- ([xshift=0.6cm]s3.south east)
+  node[midway, right=10pt, looplabel, text=arrowgray, align=left]
+  {\textbf{Bootstrap}\\(free)};
+
+% Agentic loop bracket
+\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick, ctrlbg!70!black]
+  ([xshift=0.6cm]s4.north east) -- ([xshift=0.6cm]s4b.south east)
+  node[midway, right=10pt, looplabel, text=ctrlbg!60!black, align=left]
+  {\textbf{Agentic}\\
+   \textbf{Loop}\\
+   (max $B$\\iterations)};
+
+% ════════════════════════════════════════════════════════════════════════════
+% LEGEND
+% ════════════════════════════════════════════════════════════════════════════
+\node[below=0.5cm of s4b, text width=16cm, align=center,
+      font=\sffamily\scriptsize, text=arrowgray] (legend) {%
+  \colorbox{inputbg}{\strut~User Input~}\quad
+  \colorbox{llmbg}{\strut~LLM Call~}\quad
+  \colorbox{ragbg}{\strut~RAG Retrieval~}\quad
+  \colorbox{verifybg}{\strut~Verification (Fail)~}\quad
+  \colorbox{ctrlbg}{\strut~Controller~}\quad
+  \colorbox{passbg}{\strut~Verification (Pass)~}
+};
+
+\end{tikzpicture}
+
+\end{document}
